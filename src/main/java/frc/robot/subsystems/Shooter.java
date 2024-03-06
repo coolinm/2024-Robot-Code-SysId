@@ -4,18 +4,20 @@
 
 package frc.robot.subsystems;
 
-import com.ctre.phoenix6.StatusSignal;
-import com.ctre.phoenix6.controls.DutyCycleOut;
-import com.ctre.phoenix6.controls.MotionMagicVelocityVoltage;
-import com.ctre.phoenix6.controls.MotionMagicVoltage;
+import com.ctre.phoenix6.configs.TalonFXConfiguration;
+import com.ctre.phoenix6.controls.VoltageOut;
 import com.ctre.phoenix6.hardware.CANcoder;
 import com.ctre.phoenix6.hardware.TalonFX;
 
 import frc.robot.constants.Hardware;
 import frc.robot.constants.shooter.ShooterConstants;
-import edu.wpi.first.wpilibj.Timer;
-import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
+import frc.robot.utils.ModifiedSignalLogger;
+import edu.wpi.first.units.Measure;
+import edu.wpi.first.units.Voltage;
+import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
+import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine;
+import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine.Direction;
 
 public class Shooter extends SubsystemBase
 {
@@ -25,143 +27,102 @@ public class Shooter extends SubsystemBase
   private final TalonFX m_FeederMotor = new TalonFX(Hardware.FEEDER_MOTOR_ID);
   private final CANcoder m_WristCANCoder = new CANcoder(Hardware.SHOOTER_WRIST_CANCODER_ID);
 
-  private final Timer m_timer;
-
   /**
    * @brief Creates a new Shooter subsystem.
   */
   public Shooter() 
   {
     // Motor configuration
-    m_ShooterMotor1.getConfigurator().apply(ShooterConstants.SHOOTER_MOTOR_1_CONFIGURATION);
-    m_ShooterMotor2.getConfigurator().apply(ShooterConstants.SHOOTER_MOTOR_2_CONFIGURATION);
-    m_WristMotor.getConfigurator().apply(ShooterConstants.WRIST_MOTOR_CONFIGURATION);
-    m_FeederMotor.getConfigurator().apply(ShooterConstants.FEEDER_GAINS);
+    m_ShooterMotor1.getConfigurator().apply(new TalonFXConfiguration());
+    m_ShooterMotor2.getConfigurator().apply(new TalonFXConfiguration());
+    m_WristMotor.getConfigurator().apply(new TalonFXConfiguration());
+    m_FeederMotor.getConfigurator().apply(new TalonFXConfiguration());
 
+    m_WristMotor.getConfigurator().apply(ShooterConstants.WRIST_MOTOR_CONFIGURATION);
+    
     // CANCoder configuration
     m_WristCANCoder.getConfigurator().apply(ShooterConstants.WRIST_CANCODER_CONFIGURATION);
-
-    this.m_timer = new Timer();
-    m_timer.start();
   }
 
-  // Shooter Functions
+  // Shooter Motor 1
+  private VoltageOut Shooter1VOut = new VoltageOut(0);
 
-  /**
-   * @brief Applies a Motion Magic request to the selected motor with the set velocity.
-   * @param motor The motor you want to send the request to MOTOR_1 or MOTOR_2, setting this to WRIST_MOTOR will do nothing.
-   * @param velocity The desired velocity to run the motor at, measured in rotations per second.
-  */
-  public void setMotorVelocity(ShooterConstants.MOTOR motor, double velocity)
+  private SysIdRoutine m_Shooter1Routine = new SysIdRoutine(
+    new SysIdRoutine.Config(null, null, null, ModifiedSignalLogger.logState()),
+    new SysIdRoutine.Mechanism(
+      (Measure<Voltage> volts) -> {m_ShooterMotor1.setControl(Shooter1VOut.withOutput(volts.in(volts.unit())));}, null, this));
+
+  // Shooter Motor 2
+  private VoltageOut Shooter2VOut = new VoltageOut(0);
+
+  private SysIdRoutine m_Shooter2Routine = new SysIdRoutine(
+    new SysIdRoutine.Config(null, null, null, ModifiedSignalLogger.logState()),
+    new SysIdRoutine.Mechanism(
+      (Measure<Voltage> volts) -> {m_ShooterMotor2.setControl(Shooter2VOut.withOutput(volts.in(volts.unit())));}, null, this));
+
+  // Feeder Motor
+  private VoltageOut FeederVOut = new VoltageOut(0);
+
+  private SysIdRoutine m_FeederRoutine = new SysIdRoutine(
+    new SysIdRoutine.Config(null, null, null, ModifiedSignalLogger.logState()),
+    new SysIdRoutine.Mechanism(
+      (Measure<Voltage> volts) -> {m_FeederMotor.setControl(FeederVOut.withOutput(volts.in(volts.unit())));}, null, this));
+    
+  // Wrist Motor
+  private VoltageOut WristVOut = new VoltageOut(0);
+
+  private SysIdRoutine m_WristRoutine = new SysIdRoutine(
+    new SysIdRoutine.Config(null, null, null, ModifiedSignalLogger.logState()),
+    new SysIdRoutine.Mechanism(
+      (Measure<Voltage> volts) -> {m_WristMotor.setControl(WristVOut.withOutput(volts.in(volts.unit())));}, null, this));
+
+  // Shooter 1 Commands
+  public Command runShooter1QuasiTest(Direction direction)
   {
-    MotionMagicVelocityVoltage request = new MotionMagicVelocityVoltage(velocity, ShooterConstants.SHOOTER_MOTOR_ACCELERATION, false, 0, 0, false, false, false);
-
-    switch (motor)
-    {
-      case MOTOR_1:
-        m_ShooterMotor1.setControl(request);
-        break;
-      case MOTOR_2:
-        m_ShooterMotor2.setControl(request);
-        break;
-      case WRIST_MOTOR:
-        break;
-      case FEEDER_MOTOR:
-        m_FeederMotor.setControl(request);
-        break;
-      default:
-        DutyCycleOut defaultRequest = new DutyCycleOut(0, false, false, false, false);
-        m_ShooterMotor1.setControl(defaultRequest);
-        m_ShooterMotor2.setControl(defaultRequest);
-        m_WristMotor.setControl(defaultRequest);
-        m_FeederMotor.setControl(defaultRequest);
-        break;
-    }
+    return m_Shooter1Routine.quasistatic(direction);
   }
 
-  /**
-   * @brief Applies a duty cycle to the given motor with the set percentage of the available voltage.
-   * @param motor The desired motor to send the request to.
-   * @param percent The percent of the available voltage to apply to the motor, from -1 to 1.
-  */
-  public void setShooterMotorPercent(ShooterConstants.MOTOR motor, double percent)
+  public Command runShooter1DynamTest(SysIdRoutine.Direction direction)
   {
-    DutyCycleOut request = new DutyCycleOut(percent, false, false, false, false);
-
-    switch (motor){
-      case MOTOR_1:
-        m_ShooterMotor1.setControl(request);
-        break;
-      case MOTOR_2:
-        m_ShooterMotor2.setControl(request);
-        break;
-      case WRIST_MOTOR:
-        m_WristMotor.setControl(request);
-        break;
-      case FEEDER_MOTOR:
-        m_FeederMotor.setControl(request);
-        break;
-      default:
-        DutyCycleOut defaultRequest = new DutyCycleOut(0, false, false, false, false);
-        m_ShooterMotor1.setControl(defaultRequest);
-        m_ShooterMotor2.setControl(defaultRequest);
-        m_WristMotor.setControl(defaultRequest);
-        m_FeederMotor.setControl(defaultRequest);
-        break;
-    }
+    return m_Shooter1Routine.dynamic(direction);
   }
 
-  // Wrist Functions
-
-  /**
-   * @brief Applies a Position Duty Cycle request to the wrist motor with the set position.
-   * @param position The desired position to spin the motor toward, measured in rotations.
-  */
-  public void setWristPosition(double position)
+  // Shooter 2 Tests
+  public Command runShooter2QuasiTest(Direction direction)
   {
-    MotionMagicVoltage request = new MotionMagicVoltage(position, false, ShooterConstants.SHOOTER_WRIST_FEED_FORWARD, 0, false, false, false);
-    m_WristMotor.setControl(request);
+    return m_Shooter2Routine.quasistatic(direction);
   }
 
-  // Telemetry Functions
-
-  /**
-   * @brief Gets the velocity of a motor in the shooter subsystem.
-   * @param motor The desired motor to get the velocity from.
-   * @return Returns a Status Signal of the current velocity.
-  */
-  public StatusSignal<Double> getShooterMotorVelocity(ShooterConstants.MOTOR motor)
+  public Command runShooter2DynamTest(SysIdRoutine.Direction direction)
   {
-    switch (motor){
-      case MOTOR_1:
-        return m_ShooterMotor1.getVelocity();
-      case MOTOR_2:
-        return m_ShooterMotor2.getVelocity();
-      case WRIST_MOTOR:
-        return m_WristMotor.getVelocity();
-      case FEEDER_MOTOR:
-        return m_FeederMotor.getVelocity();
-      default:
-        return m_ShooterMotor1.getVelocity();
-    }
+    return m_Shooter2Routine.dynamic(direction);
   }
 
-  /**
-   * @brief Gets the position of the wrist motor.
-   * @return Returns a Status Signal of the current position.
-  */
-  public StatusSignal<Double> getWristMotorPosition()
+  // Wrist Tests
+  public Command runShooterWristQuasiTest(SysIdRoutine.Direction direction)
   {
-    return m_WristCANCoder.getAbsolutePosition();
+    return m_WristRoutine.quasistatic(direction);
   }
 
+  public Command runShooterWristDynamTest(SysIdRoutine.Direction direction)
+  {
+    return m_WristRoutine.dynamic(direction);
+  }
+
+  // Feeder Tests
+  public Command runFeederQuasiTest(SysIdRoutine.Direction direction)
+  {
+    return m_FeederRoutine.quasistatic(direction);
+  }
+
+  public Command runFeederDynamTest(SysIdRoutine.Direction direction)
+  {
+    return m_FeederRoutine.dynamic(direction);
+  }
+  
   @Override
   public void periodic()
   {
-    if (m_timer.get() > 0.5)
-    {
-      m_timer.reset();
-      SmartDashboard.putNumber("Shooter Wrist position", this.getWristMotorPosition().getValue());
-    }
+    // Intentionally Empty
   }
 }

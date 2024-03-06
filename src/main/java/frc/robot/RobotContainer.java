@@ -13,7 +13,8 @@ import frc.robot.subsystems.Drivetrain;
 import frc.robot.subsystems.IntakeSubsystem;
 import frc.robot.subsystems.Elevator;
 import frc.robot.subsystems.Shooter;
-import frc.robot.commands.drivetrain.Drive;
+import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine.Direction;
+
 
 public class RobotContainer 
 {
@@ -28,43 +29,6 @@ public class RobotContainer
   // Controllers
   private final CommandXboxController m_primaryController = new CommandXboxController(Hardware.PRIMARY_CONTROLLER_PORT);
 
-  // Getters
-  /**
-   * @brief Gets the Drivetrain subsystem.
-   * @return The drivetrain object
-   */
-  public Drivetrain getDriveSub()
-  {
-    return this.m_Drivetrain;
-  }
-
-  /**
-   * @brief Gets the elevator subsystem.
-   * @return The elevator object
-   */
-  public Elevator getElevator()
-  {
-    return this.m_Elevator;
-  }
-
-  /**
-   * @brief Gets the shooter subsystem.
-   * @return The shooter object
-   */
-  public Shooter getShooter()
-  {
-    return this.m_Shooter;
-  }
-
-   /**
-   * @brief Gets the intake subsystem.
-   * @return The intake object
-   */
-  public IntakeSubsystem getIntake()
-  {
-    return this.m_Intake;
-  }
-
   public RobotContainer() 
   {
     configureBindings();
@@ -72,12 +36,10 @@ public class RobotContainer
   
   private void configureBindings() 
   {
-    m_Drivetrain.setDefaultCommand(
-      new Drive(m_Drivetrain,
-                () -> -m_primaryController.getLeftY(),
-                () -> -m_primaryController.getLeftX(),
-                () -> -m_primaryController.getRightX()
-      ));
+    m_primaryController.x().onTrue(m_Shooter.runShooter1QuasiTest(Direction.kForward));
+    m_primaryController.y().onTrue(m_Shooter.runShooter1QuasiTest(Direction.kReverse));
+    m_primaryController.a().onTrue(m_Shooter.runShooter1DynamTest(Direction.kForward));
+    m_primaryController.b().onTrue(m_Shooter.runShooter1DynamTest(Direction.kReverse));
   }
 
   public Command getAutonomousCommand() 
